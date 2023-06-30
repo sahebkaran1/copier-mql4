@@ -1,2 +1,2 @@
 # copier 
-for copy trades master account to another with lot and money management
+for copy trades master account to another with specific lot and money management
