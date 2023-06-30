@@ -25,6 +25,15 @@ extern string Suffix="";
 extern bool CopyDelayedTrades=false;
 extern bool IgnoreSLTP=false;
 
+input string lose_profit_closing_Settings = "------------------------------------lose_profit_closing_Settings------------------------------------";
+input double maxProfit_per=1;// maxProfit_per 0.2 last balance
+input double maxProfit_dolar=100;// maxProfit_dolar +n dolar
+input double maxLose_dolar=100;// maxLose_dolar +n dolar
+input double maxLose_per=1;// maxLose_per 0.2 last balance
+double lastEquity;
+input int magicNumber=0;// magicNumber 0 alltrades +x magic id x
+input bool deactiveExper_profit_happen=true;
+
 double Balance=0;
 int start,TickCount;
 int Size=0,RealSize=0,PrevSize=-1;
@@ -82,6 +91,90 @@ int deinit()
 //+------------------------------------------------------------------+
 //| expert start function                                            |
 //+------------------------------------------------------------------+
+bool close_Max_Profit_lose()
+  {
+   static bool lock_del_trade=false;
+   if(AccountBalance()==AccountEquity()&&OrdersTotal()==0)
+     {
+      lastEquity=AccountEquity();
+      if(deactiveExper_profit_happen&&lock_del_trade==true)
+        {
+         lock_del_trade=false;
+         ExpertRemove();
+
+        }
+     }
+   int total=OrdersTotal();
+   double maxValue_prof=lastEquity*maxProfit_per;
+   double maxValue_lose=-lastEquity*maxLose_per;
+//printf("maxValue_prof %g",maxValue_prof);printf("maxValue_lose %g",maxValue_lose);
+   double sum_profit=0;
+   for(int pos=0; pos<total; pos++)
+     {
+      if(OrderSelect(pos,SELECT_BY_POS)==true)
+        {
+
+         if((magicNumber==OrderMagicNumber()||magicNumber==0)&&OrderCloseTime()==0&&OrderSymbol()==_Symbol)
+           {
+            sum_profit+=NormalizeDouble(OrderProfit()+OrderCommission()+OrderSwap(),2);
+           }
+        }
+     }
+//  double profit=NormalizeDouble(OrderProfit()+OrderCommission()+OrderSwap(),2);
+
+   if(sum_profit>maxValue_prof||sum_profit<maxValue_lose
+      ||sum_profit>maxProfit_dolar||sum_profit<-maxLose_dolar)
+      //   ||lock_del_trade==true)
+     {
+      lock_del_trade=true;
+      printf("close_Max_Profit_lose with sum_profit %g",sum_profit);
+     }
+   if(lock_del_trade==true)
+     {
+      for( pos=0; pos<total; pos++)
+        {
+         if(OrderSelect(pos,SELECT_BY_POS)==true)
+           {
+
+            if((magicNumber==OrderMagicNumber()||magicNumber==0)&&
+               OrderCloseTime()==0&&OrderSymbol()==_Symbol)
+              {
+               double price=Ask;
+               if(OrderType()==OP_BUY)
+                  price=Bid;
+               //printf("closeMaxPro_lose happen with %g",sum_profit);
+               if(OrderClose(OrderTicket(),OrderLots(),price,3,0))
+                 {
+                  printf("closeMaxPro_lose do with profit "+DoubleToStr(sum_profit,2)+IntegerToString(magicNumber));
+                 }
+               else
+                 {
+                  printf("closeMaxPro_lose Eror # "+IntegerToString(GetLastError(),4)+IntegerToString(magicNumber));
+
+
+                 }
+              }
+           }
+        }
+     }
+
+   return false;
+  }
+void OnTick()
+  {
+   close_Max_Profit_lose();
+   Comment(" base equity ---------------->",DoubleToStr(lastEquity)
+           +"\n maxProfit_dolar ---------------->",DoubleToStr(maxProfit_dolar,1)
+           +"\n maxLose_dolar ---------------->",DoubleToStr(maxLose_dolar,1)
+           +"\n maxProfit_per ---------------->",DoubleToStr(lastEquity*maxProfit_per,1)
+           +"\n maxLose_per ---------------->",DoubleToStr(lastEquity*maxLose_per,1)
+           +"\n AccountProfit() ---------------->",DoubleToStr(AccountProfit(),1)
+
+          );
+
+//---
+
+  }
 int start()
   {
 //----
