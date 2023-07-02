@@ -33,6 +33,10 @@ input double maxLose_per=1;// maxLose_per 0.2 last balance
 double lastEquity;
 input int magicNumber=0;// magicNumber 0 alltrades +x magic id x
 input bool deactiveExper_profit_happen=true;
+input string risk_free_Settings = "------------------------------------risk_free_Settings------------------------------------";
+input bool activate_risk_free=true;// activate_risk_free if Happen Expert remove
+input int riskFree_min_profit_point=500;
+
 
 double Balance=0;
 int start,TickCount;
@@ -185,8 +189,61 @@ bool close_Max_Profit_lose()
 //+------------------------------------------------------------------+
 //|                                                                  |
 //+------------------------------------------------------------------+
+bool riskfree_do()
+  {
+   static bool riskfree_happen=false;
+
+   int total=OrdersTotal();
+
+//printf("maxValue_prof %g",maxValue_prof);printf("maxValue_lose %g",maxValue_lose);
+   double sum_profit=0;
+   int Spread=(int)MarketInfo(Symbol(),MODE_SPREAD);
+   for(int pos=0; pos<total; pos++)
+     {
+      if(OrderSelect(pos,SELECT_BY_POS)==true)
+        {
+
+         if((magicNumber==OrderMagicNumber()||magicNumber==0)&&OrderCloseTime()==0&&OrderSymbol()==_Symbol)
+           {
+            // sum_profit+=NormalizeDouble(OrderProfit()+OrderCommission()+OrderSwap(),2);
+            if(OrderType()==OP_BUY&&Bid>OrderOpenPrice()+riskFree_min_profit_point*Point())
+
+               if(OrderStopLoss()<=OrderOpenPrice())
+                 {
+                  OrderModify(OrderTicket(),OrderOpenPrice(),OrderOpenPrice()+Spread*Point,OrderTakeProfit(),OrderExpiration(),clrDimGray);
+
+                 }
+               else
+                 {
+                  ExpertRemove();
+                 }
+            if(OrderType()==OP_SELL&&Ask<OrderOpenPrice()-riskFree_min_profit_point*Point())
+
+               if(OrderStopLoss()>=OrderOpenPrice())
+                 {
+                  OrderModify(OrderTicket(),OrderOpenPrice(),OrderOpenPrice()-Spread*Point,OrderTakeProfit(),OrderExpiration(),clrDimGray);
+
+                 }
+               else
+                 {
+                  ExpertRemove();
+                 }
+           }
+        }
+     }
+//  double profit=NormalizeDouble(OrderProfit()+OrderCommission()+OrderSwap(),2);
+
+   return false;
+  }
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
 void OnTick()
   {
+   if(activate_risk_free)
+     {
+      riskfree_do();
+     }
    close_Max_Profit_lose();
    Comment(" base equity ---------------->",DoubleToStr(lastEquity)
            +"\n maxProfit_dolar ---------------->",DoubleToStr(maxProfit_dolar,1)
@@ -633,5 +690,7 @@ double maxlot(string symbol) {return(MarketInfo(symbol,MODE_MAXLOT));}
 //--- min lot
 double minlot(string symbol) {return(MarketInfo(symbol,MODE_MINLOT));}
 
+
+//+------------------------------------------------------------------+
 
 //+------------------------------------------------------------------+
