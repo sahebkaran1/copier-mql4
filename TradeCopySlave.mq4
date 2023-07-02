@@ -78,6 +78,28 @@ int init()
    return(0);
   }
 //+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
+bool open_trade_with_another_expert()
+  {
+   if(OrderSelect(0,SELECT_BY_POS,MODE_TRADES))
+     {
+      if(OrderMagicNumber() == magicNumber||magicNumber==0)
+        {
+         if(OrderSymbol() == _Symbol)
+           {
+            if(TimeCurrent()-OrderOpenTime()>=30)
+              {
+               return true;
+              }
+            else
+               return false;
+           }
+        }
+     }
+   return true;
+  }
+//+------------------------------------------------------------------+
 //| expert deinitialization function                                 |
 //+------------------------------------------------------------------+
 int deinit()
@@ -131,7 +153,7 @@ bool close_Max_Profit_lose()
      }
    if(lock_del_trade==true)
      {
-      for( pos=0; pos<total; pos++)
+      for(pos=0; pos<total; pos++)
         {
          if(OrderSelect(pos,SELECT_BY_POS)==true)
            {
@@ -160,6 +182,9 @@ bool close_Max_Profit_lose()
 
    return false;
   }
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
 void OnTick()
   {
    close_Max_Profit_lose();
@@ -175,6 +200,9 @@ void OnTick()
 //---
 
   }
+//+------------------------------------------------------------------+
+//|                                                                  |
+//+------------------------------------------------------------------+
 int start()
   {
 //----
@@ -445,7 +473,7 @@ void compare_positions()
               }
            }
         }
-      if(!found)
+      if(!found)//&&!open_trade_with_another_expert())
         {
          //no position open with this ID, need to open now
          int result;
