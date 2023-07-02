@@ -473,7 +473,7 @@ void compare_positions()
               }
            }
         }
-      if(!found)//&&!open_trade_with_another_expert())
+      if(!found&&!open_trade_with_another_expert())
         {
          //no position open with this ID, need to open now
          int result;
