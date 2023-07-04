@@ -9,7 +9,6 @@
 // 2012-05-01 Prefix and Suffix added
 // 2022-07-15 Possibility to ignore SL and TP
 //2023-6-3 S2 -1 copy same master lot on slave
-//2023-7-4 money mangement max lose and max profit add and risk free parameters
 
 input int id_server=11;
 extern string filename="TradeCopy";
@@ -322,8 +321,7 @@ void OnTick()
       // Comment("TimeCurrent() "+TimeCurrent());
       Comment("TimeCurrent() "+TimeToStr(TimeCurrent())+"\n"+
               cmt+
-              "\n riskFree_ignoreSlTp ---->"+riskFree_ignoreSlTp+
-              "\n spread              ---->"+IntegerToString(spred(_Symbol)));
+              "\n riskFree_ignoreSlTp ---->"+riskFree_ignoreSlTp);
       TickCount=GetTickCount()-start;
       // if(delay>TickCount)
       //  Sleep(delay-TickCount-2);
@@ -394,7 +392,7 @@ void parse_s()
 
       // get line length, starting position, find position of ",", calculate the length of the substring
       int Len=StringLen(s[i]);
-      //int start=0;
+      int start=0;
       int end=StringFind(s[i],",",start);
       int length=end-start;
       // get Id
@@ -495,7 +493,6 @@ string VerbType(int type)
          return ("SELL STOP");
          break;
      }
-   return "none";
   }
 
 
@@ -556,17 +553,16 @@ void compare_positions()
             if(OrdTyp[i]>1 && OrdPrice[i] != RealOrdPrice[j])
               {
                if(OrderSelect(RealOrdId[j],SELECT_BY_TICKET))
-                  if(!OrderModify(OrderTicket(),OrdPrice[i],OrderStopLoss(),OrderTakeProfit(),0))
-                     printf("OrderModify #"+IntegerToString(GetLastError()));
+                  OrderModify(OrderTicket(),OrdPrice[i],OrderStopLoss(),OrderTakeProfit(),0);
+               printf("5");
               }
             //compare SL,TP
             if(riskFree_ignoreSlTp==false&&
                IgnoreSLTP==false && (OrdTP[i]!=RealOrdTP[j] || OrdSL[i]!=RealOrdSL[j]))
               {
-               if(OrderSelect(RealOrdId[j],SELECT_BY_TICKET))
-                  if(!OrderModify(OrderTicket(),OrderOpenPrice(),OrdSL[i],OrdTP[i],0))
-                     printf("OrderModify #"+IntegerToString(GetLastError()));
-
+               OrderSelect(RealOrdId[j],SELECT_BY_TICKET);
+               OrderModify(OrderTicket(),OrderOpenPrice(),OrdSL[i],OrdTP[i],0);
+               printf("6");
               }
            }
         }
@@ -589,8 +585,7 @@ void compare_positions()
                if(result>0)
                  {
                   if(IgnoreSLTP==false&&riskFree_ignoreSlTp==false)
-                     if(!OrderModify(result,OrderOpenPrice(),OrdSL[i],OrdTP[i],0))
-                        printf("OrderModify #"+IntegerToString(GetLastError()));
+                     OrderModify(result,OrderOpenPrice(),OrdSL[i],OrdTP[i],0);
                  }
                else
                   Print("Open ",OrdSym[i]," failed: ",GetLastError());
@@ -625,9 +620,8 @@ void compare_positions()
            }
          else
            {
-
-            if(!OrderDelete(RealOrdId[j],CLR_NONE))
-               printf("OrderDelete #"+IntegerToString(GetLastError()));
+            printf("10");
+            OrderDelete(RealOrdId[j],CLR_NONE);
            }
         }
      }
@@ -677,21 +671,21 @@ void real_positions()
    int i=0;
    for(int cnt=0; cnt<OrdersTotal(); cnt++)
      {
-      if(OrderSelect(cnt, SELECT_BY_POS, MODE_TRADES))
-         if(OrderMagicNumber()==magic || ! magic)
-           {
-            if(RealSize<i+1)
-               RealResize(i+1);
-            RealOrdId[i]=OrderTicket();
-            RealOrdSym[i]=OrderSymbol();
-            RealOrdTyp[i]=OrderType();
-            RealOrdLot[i]=OrderLots();
-            RealOrdPrice[i]=OrderOpenPrice();
-            RealOrdSL[i]=OrderStopLoss();
-            RealOrdTP[i]=OrderTakeProfit();
-            RealOrdOrig[i]=OrderComment();
-            i++;
-           }
+      OrderSelect(cnt, SELECT_BY_POS, MODE_TRADES);
+      if(OrderMagicNumber()==magic || ! magic)
+        {
+         if(RealSize<i+1)
+            RealResize(i+1);
+         RealOrdId[i]=OrderTicket();
+         RealOrdSym[i]=OrderSymbol();
+         RealOrdTyp[i]=OrderType();
+         RealOrdLot[i]=OrderLots();
+         RealOrdPrice[i]=OrderOpenPrice();
+         RealOrdSL[i]=OrderStopLoss();
+         RealOrdTP[i]=OrderTakeProfit();
+         RealOrdOrig[i]=OrderComment();
+         i++;
+        }
      }
    RealResize(i);
   }
