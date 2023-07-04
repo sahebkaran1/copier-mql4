@@ -1,7 +1,8 @@
 //+------------------------------------------------------------------+
 //|                                               TradeCopySlave.mq4 |
 //|                                                                  |
-//| Copyright (c) 2023 metafx |
+//| Copyright (c) 2023 metafx 
+
 //+------------------------------------------------------------------+
 #property copyright "Copyright © 2011-2022, Syslog.eu, rel. 2022-07-15"
 #property link      "http://syslog.eu"
@@ -37,6 +38,7 @@ input bool deactiveExper_profit_happen=true;
 input string risk_free_Settings = "------------------------------------risk_free_Settings------------------------------------";
 input bool activate_risk_free=true;// activate_risk_free if Happen Expert remove
 input int riskFree_min_profit_point=500;
+input int riskFree_min_move_point=10;
 
 bool riskFree_ignoreSlTp=false;//for deavtive process copy sl tp
 
@@ -203,7 +205,7 @@ bool riskfree_do()//riskfree_doing process
       riskFree_ignoreSlTp=false;
 //printf("maxValue_prof %g",maxValue_prof);printf("maxValue_lose %g",maxValue_lose);
    double sum_profit=0;
-   int Spread=(int)MarketInfo(Symbol(),MODE_SPREAD);
+   int Spread=spred(_Symbol);
    for(int pos=0; pos<total; pos++)
      {
       if(OrderSelect(pos,SELECT_BY_POS)==true)
@@ -217,7 +219,7 @@ bool riskfree_do()//riskfree_doing process
                if(OrderStopLoss()<=OrderOpenPrice())
                  {
                   riskFree_ignoreSlTp=true;
-                  OrderModify(OrderTicket(),OrderOpenPrice(),OrderOpenPrice()+Spread*Point,OrderTakeProfit(),OrderExpiration(),clrDimGray);
+                  OrderModify(OrderTicket(),OrderOpenPrice(),OrderOpenPrice()+Spread*Point()+riskFree_min_move_point*Point(),OrderTakeProfit(),OrderExpiration(),clrDimGray);
                   printf("riskFree_ignoreSlTp 1");
                  }
                else
@@ -229,7 +231,7 @@ bool riskfree_do()//riskfree_doing process
                if(OrderStopLoss()>=OrderOpenPrice())
                  {
                   riskFree_ignoreSlTp=true;
-                  OrderModify(OrderTicket(),OrderOpenPrice(),OrderOpenPrice()-Spread*Point,OrderTakeProfit(),OrderExpiration(),clrDimGray);
+                  OrderModify(OrderTicket(),OrderOpenPrice(),OrderOpenPrice()-Spread*Point()-riskFree_min_move_point*Point(),OrderTakeProfit(),OrderExpiration(),clrDimGray);
                   printf("riskFree_ignoreSlTp 2");
                  }
                else
@@ -314,14 +316,12 @@ void OnTick()
       // if(delay>TickCount)
       //  Sleep(delay-TickCount-2);
      }
-//  Alert("end, TradeCopy EA stopped");
-//Comment("");
-   return(0);
+
 
   }
 
 //+------------------------------------------------------------------+
-//|                                                                  |
+//|               load_positions                                                   |
 //+------------------------------------------------------------------+
 void load_positions()
   {
