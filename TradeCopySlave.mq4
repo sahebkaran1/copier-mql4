@@ -14,7 +14,7 @@ extern string filename="TradeCopy";
 extern string S1="recalculate Lot by this coefficient:";
 extern double LotCoeff=0.1;
 extern string S2="if set force Lot to this value,-1 same orginal lot";
-extern double ForceLot=0.01;
+extern double ForceLot=-1;
 extern string S3="is set, use this amount for every 0.01 Lot if higher than calculated above:";
 extern double MicroLotBalance=0;
 extern int delay=1000;
@@ -22,13 +22,14 @@ extern double PipsTolerance=5;
 extern int magic=20111219;
 extern string Prefix="";
 extern string Suffix="";
-extern bool CopyDelayedTrades=false;
+bool CopyDelayedTrades=false;
 extern bool IgnoreSLTP=false;
+
 
 input string lose_profit_closing_Settings = "------------------------------------lose_profit_closing_Settings------------------------------------";
 input double maxProfit_per=1;// maxProfit_per 0.2 last balance
 input double maxProfit_dolar=100;// maxProfit_dolar +n dolar
-input double maxLose_dolar=100;// maxLose_dolar +n dolar
+input double maxLose_dolar=1;// maxLose_dolar +n dolar
 input double maxLose_per=1;// maxLose_per 0.2 last balance
 double lastEquity;
 input int magicNumber=0;// magicNumber 0 alltrades +x magic id x
@@ -37,6 +38,7 @@ input string risk_free_Settings = "------------------------------------risk_free
 input bool activate_risk_free=true;// activate_risk_free if Happen Expert remove
 input int riskFree_min_profit_point=500;
 
+bool riskFree_ignoreSlTp=false;//for deavtive process copy sl tp
 
 double Balance=0;
 int start,TickCount;
@@ -78,6 +80,7 @@ int init()
       mp=10;
      }
 
+//copying();
 //----
    return(0);
   }
@@ -119,13 +122,14 @@ int deinit()
 //+------------------------------------------------------------------+
 bool close_Max_Profit_lose()
   {
+//return;
    static bool lock_del_trade=false;
    if(AccountBalance()==AccountEquity()&&OrdersTotal()==0)
      {
       lastEquity=AccountEquity();
       if(deactiveExper_profit_happen&&lock_del_trade==true)
         {
-         lock_del_trade=false;
+         //lock_del_trade=false;
          ExpertRemove();
 
         }
@@ -183,18 +187,20 @@ bool close_Max_Profit_lose()
            }
         }
      }
-
+   if(lock_del_trade==true)
+      return true;
    return false;
   }
 //+------------------------------------------------------------------+
 //|                                                                  |
 //+------------------------------------------------------------------+
-bool riskfree_do()
+bool riskfree_do()//riskfree_doing process
   {
    static bool riskfree_happen=false;
 
    int total=OrdersTotal();
-
+   if(total==0)
+      riskFree_ignoreSlTp=false;
 //printf("maxValue_prof %g",maxValue_prof);printf("maxValue_lose %g",maxValue_lose);
    double sum_profit=0;
    int Spread=(int)MarketInfo(Symbol(),MODE_SPREAD);
@@ -210,23 +216,25 @@ bool riskfree_do()
 
                if(OrderStopLoss()<=OrderOpenPrice())
                  {
+                  riskFree_ignoreSlTp=true;
                   OrderModify(OrderTicket(),OrderOpenPrice(),OrderOpenPrice()+Spread*Point,OrderTakeProfit(),OrderExpiration(),clrDimGray);
-
+                  printf("riskFree_ignoreSlTp 1");
                  }
                else
                  {
-                  ExpertRemove();
+                  // ExpertRemove();
                  }
             if(OrderType()==OP_SELL&&Ask<OrderOpenPrice()-riskFree_min_profit_point*Point())
 
                if(OrderStopLoss()>=OrderOpenPrice())
                  {
+                  riskFree_ignoreSlTp=true;
                   OrderModify(OrderTicket(),OrderOpenPrice(),OrderOpenPrice()-Spread*Point,OrderTakeProfit(),OrderExpiration(),clrDimGray);
-
+                  printf("riskFree_ignoreSlTp 2");
                  }
                else
                  {
-                  ExpertRemove();
+                  //ExpertRemove();
                  }
            }
         }
@@ -238,36 +246,44 @@ bool riskfree_do()
 //+------------------------------------------------------------------+
 //|                                                                  |
 //+------------------------------------------------------------------+
-void OnTick()
+bool checking_moneyManagement()
   {
+//printf("activate_risk_free");
    if(activate_risk_free)
      {
       riskfree_do();
      }
-   close_Max_Profit_lose();
-   Comment(" base equity ---------------->",DoubleToStr(lastEquity)
-           +"\n maxProfit_dolar ---------------->",DoubleToStr(maxProfit_dolar,1)
-           +"\n maxLose_dolar ---------------->",DoubleToStr(maxLose_dolar,1)
-           +"\n maxProfit_per ---------------->",DoubleToStr(lastEquity*maxProfit_per,1)
-           +"\n maxLose_per ---------------->",DoubleToStr(lastEquity*maxLose_per,1)
-           +"\n AccountProfit() ---------------->",DoubleToStr(AccountProfit(),1)
 
-          );
+   if(close_Max_Profit_lose())
+      return true;
+   return false;
+   /* Comment(" base equity ---------------->",DoubleToStr(lastEquity)
+            +"\n maxProfit_dolar ---------------->",DoubleToStr(maxProfit_dolar,1)
+            +"\n maxLose_dolar ---------------->",DoubleToStr(maxLose_dolar,1)
+            +"\n maxProfit_per ---------------->",DoubleToStr(lastEquity*maxProfit_per,1)
+            +"\n maxLose_per ---------------->",DoubleToStr(lastEquity*maxLose_per,1)
+            +"\n AccountProfit() ---------------->",DoubleToStr(AccountProfit(),1)
+
+           );*/
 
 //---
 
   }
+
 //+------------------------------------------------------------------+
 //|                                                                  |
 //+------------------------------------------------------------------+
-int start()
+void OnTick()
   {
 //----
-   Print("Got a tick...");
-   while(!IsStopped())
+
+// if(!IsStopped()&&MathMod(TimeCurrent(),2) !=0)
      {
-      if(!IsExpertEnabled())
-         break;
+
+      //if(!IsExpertEnabled())
+      // return;
+
+
 
       start=GetTickCount();
 
@@ -283,16 +299,23 @@ int start()
       // Make sense to make changes only when the market is open and trading allowed
       if(IsTradeAllowed() && IsConnected())
         {
-         compare_positions();
-        }
+         // load real positions
+         real_positions();
 
-      Comment(cmt);
+         if(checking_moneyManagement()==false)
+            compare_positions();
+
+        }
+  // Comment("TimeCurrent() "+TimeCurrent());
+      Comment("TimeCurrent() "+TimeToStr(TimeCurrent())+"\n"+
+      cmt+
+      "\n riskFree_ignoreSlTp ---->"+riskFree_ignoreSlTp);
       TickCount=GetTickCount()-start;
-      if(delay>TickCount)
-         Sleep(delay-TickCount-2);
+      // if(delay>TickCount)
+      //  Sleep(delay-TickCount-2);
      }
 //  Alert("end, TradeCopy EA stopped");
-   Comment("");
+//Comment("");
    return(0);
 
   }
@@ -494,8 +517,8 @@ int DigitsMinLot(string symbol)
 //+------------------------------------------------------------------+
 void compare_positions()
   {
-// load real positions and compare them with master ones
-   real_positions();
+// compare them with master ones
+
    int x[];
    ArrayResize(x,RealSize);
    if(RealSize>0)
@@ -519,18 +542,21 @@ void compare_positions()
             //compare open price when delayed order
             if(OrdTyp[i]>1 && OrdPrice[i] != RealOrdPrice[j])
               {
-               OrderSelect(RealOrdId[j],SELECT_BY_TICKET);
-               OrderModify(OrderTicket(),OrdPrice[i],OrderStopLoss(),OrderTakeProfit(),0);
+               if(OrderSelect(RealOrdId[j],SELECT_BY_TICKET))
+                  OrderModify(OrderTicket(),OrdPrice[i],OrderStopLoss(),OrderTakeProfit(),0);
+               printf("5");
               }
             //compare SL,TP
-            if(IgnoreSLTP==false && (OrdTP[i]!=RealOrdTP[j] || OrdSL[i]!=RealOrdSL[j]))
+            if(riskFree_ignoreSlTp==false&&
+               IgnoreSLTP==false && (OrdTP[i]!=RealOrdTP[j] || OrdSL[i]!=RealOrdSL[j]))
               {
                OrderSelect(RealOrdId[j],SELECT_BY_TICKET);
                OrderModify(OrderTicket(),OrderOpenPrice(),OrdSL[i],OrdTP[i],0);
+               printf("6");
               }
            }
         }
-      if(!found&&!open_trade_with_another_expert())
+      if(!found)//&&!open_trade_with_another_expert())
         {
          //no position open with this ID, need to open now
          int result;
@@ -540,14 +566,15 @@ void compare_positions()
             double Price=MarketPrice(i);
 
             // PipsTolerance for Price:
-            if((OrdTyp[i]==OP_BUY  && Price<OrdPrice[i]+PipsTolerance*mp*Point) ||
-               (OrdTyp[i]==OP_SELL && Price>OrdPrice[i]-PipsTolerance*mp*Point))
+            if((OrdTyp[i]==OP_BUY  && MathAbs(NormalizeDouble(Price-OrdPrice[i],Digits()))<PipsTolerance*mp*Point) ||
+               (OrdTyp[i]==OP_SELL && MathAbs(NormalizeDouble(Price-OrdPrice[i],Digits()))<PipsTolerance*mp*Point)
+              )
               {
-
+               printf("fasele -->%g",NormalizeDouble(Price-OrdPrice[i],Digits()));
                result=OrderSend(OrdSym[i],OrdTyp[i],OrdLot[i],Price,5,0,0,DoubleToStr(OrdId[i],0),magic,0);
                if(result>0)
                  {
-                  if(IgnoreSLTP==false)
+                  if(IgnoreSLTP==false&&riskFree_ignoreSlTp==false)
                      OrderModify(result,OrderOpenPrice(),OrdSL[i],OrdTP[i],0);
                  }
                else
@@ -574,6 +601,7 @@ void compare_positions()
          if(RealOrdTyp[j]<2)
            {
             Price=MarketPrice(j,"close");
+            printf("9");
             result=OrderClose(RealOrdId[j],RealOrdLot[j],Price,5,CLR_NONE);
             if(result<1)
                Print("Close ",RealOrdId[j]," / ",RealOrdLot[j]," / ",Price," failed: ",GetLastError());
@@ -582,6 +610,7 @@ void compare_positions()
            }
          else
            {
+            printf("10");
             OrderDelete(RealOrdId[j],CLR_NONE);
            }
         }
