@@ -1,7 +1,7 @@
 //+------------------------------------------------------------------+
 //|                                               TradeCopySlave.mq4 |
 //|                                                                  |
-//| Copyright (c) 2023 metafx 
+//| Copyright (c) 2023 metafx
 
 //+------------------------------------------------------------------+
 #property copyright "Copyright © 2011-2022, Syslog.eu, rel. 2022-07-15"
@@ -9,6 +9,7 @@
 // 2012-05-01 Prefix and Suffix added
 // 2022-07-15 Possibility to ignore SL and TP
 //2023-6-3 S2 -1 copy same master lot on slave
+//2023-7-4 money mangement max lose and max profit add and risk free parameters
 
 input int id_server=11;
 extern string filename="TradeCopy";
@@ -211,33 +212,43 @@ bool riskfree_do()//riskfree_doing process
       if(OrderSelect(pos,SELECT_BY_POS)==true)
         {
 
-         if((magicNumber==OrderMagicNumber()||magicNumber==0)&&OrderCloseTime()==0&&OrderSymbol()==_Symbol)
+         if((magicNumber==OrderMagicNumber()||magicNumber==0)
+            // &&OrderCloseTime()==0
+            &&OrderSymbol()==_Symbol)
            {
             // sum_profit+=NormalizeDouble(OrderProfit()+OrderCommission()+OrderSwap(),2);
             if(OrderType()==OP_BUY&&Bid>OrderOpenPrice()+riskFree_min_profit_point*Point())
-
+              {
                if(OrderStopLoss()<=OrderOpenPrice())
                  {
                   riskFree_ignoreSlTp=true;
-                  OrderModify(OrderTicket(),OrderOpenPrice(),OrderOpenPrice()+Spread*Point()+riskFree_min_move_point*Point(),OrderTakeProfit(),OrderExpiration(),clrDimGray);
+                  if(!OrderModify(OrderTicket(),
+                                  OrderOpenPrice(),OrderOpenPrice()+Spread*Point()+riskFree_min_move_point*Point(),
+                                  OrderTakeProfit(),OrderExpiration(),clrDimGray))
+                     printf("OrderModify eror #"+IntegerToString(GetLastError()));
                   printf("riskFree_ignoreSlTp 1");
                  }
                else
                  {
                   // ExpertRemove();
                  }
+              }
             if(OrderType()==OP_SELL&&Ask<OrderOpenPrice()-riskFree_min_profit_point*Point())
-
-               if(OrderStopLoss()>=OrderOpenPrice())
+              {
+               if(OrderStopLoss()>=OrderOpenPrice()||OrderStopLoss()==0)
                  {
                   riskFree_ignoreSlTp=true;
-                  OrderModify(OrderTicket(),OrderOpenPrice(),OrderOpenPrice()-Spread*Point()-riskFree_min_move_point*Point(),OrderTakeProfit(),OrderExpiration(),clrDimGray);
+                  if(!OrderModify(OrderTicket()
+                                  ,OrderOpenPrice(),OrderOpenPrice()-Spread*Point()-riskFree_min_move_point*Point()
+                                  ,OrderTakeProfit(),OrderExpiration(),clrDimGray))
+                     printf("OrderModify eror #"+IntegerToString(GetLastError()));
                   printf("riskFree_ignoreSlTp 2");
                  }
                else
                  {
                   //ExpertRemove();
                  }
+              }
            }
         }
      }
@@ -308,10 +319,11 @@ void OnTick()
             compare_positions();
 
         }
-  // Comment("TimeCurrent() "+TimeCurrent());
+      // Comment("TimeCurrent() "+TimeCurrent());
       Comment("TimeCurrent() "+TimeToStr(TimeCurrent())+"\n"+
-      cmt+
-      "\n riskFree_ignoreSlTp ---->"+riskFree_ignoreSlTp);
+              cmt+
+              "\n riskFree_ignoreSlTp ---->"+riskFree_ignoreSlTp+
+              "\n spread              ---->"+IntegerToString(spred(_Symbol)));
       TickCount=GetTickCount()-start;
       // if(delay>TickCount)
       //  Sleep(delay-TickCount-2);
@@ -382,7 +394,7 @@ void parse_s()
 
       // get line length, starting position, find position of ",", calculate the length of the substring
       int Len=StringLen(s[i]);
-      int start=0;
+      //int start=0;
       int end=StringFind(s[i],",",start);
       int length=end-start;
       // get Id
@@ -483,6 +495,7 @@ string VerbType(int type)
          return ("SELL STOP");
          break;
      }
+   return "none";
   }
 
 
@@ -543,16 +556,17 @@ void compare_positions()
             if(OrdTyp[i]>1 && OrdPrice[i] != RealOrdPrice[j])
               {
                if(OrderSelect(RealOrdId[j],SELECT_BY_TICKET))
-                  OrderModify(OrderTicket(),OrdPrice[i],OrderStopLoss(),OrderTakeProfit(),0);
-               printf("5");
+                  if(!OrderModify(OrderTicket(),OrdPrice[i],OrderStopLoss(),OrderTakeProfit(),0))
+                     printf("OrderModify #"+IntegerToString(GetLastError()));
               }
             //compare SL,TP
             if(riskFree_ignoreSlTp==false&&
                IgnoreSLTP==false && (OrdTP[i]!=RealOrdTP[j] || OrdSL[i]!=RealOrdSL[j]))
               {
-               OrderSelect(RealOrdId[j],SELECT_BY_TICKET);
-               OrderModify(OrderTicket(),OrderOpenPrice(),OrdSL[i],OrdTP[i],0);
-               printf("6");
+               if(OrderSelect(RealOrdId[j],SELECT_BY_TICKET))
+                  if(!OrderModify(OrderTicket(),OrderOpenPrice(),OrdSL[i],OrdTP[i],0))
+                     printf("OrderModify #"+IntegerToString(GetLastError()));
+
               }
            }
         }
@@ -575,7 +589,8 @@ void compare_positions()
                if(result>0)
                  {
                   if(IgnoreSLTP==false&&riskFree_ignoreSlTp==false)
-                     OrderModify(result,OrderOpenPrice(),OrdSL[i],OrdTP[i],0);
+                     if(!OrderModify(result,OrderOpenPrice(),OrdSL[i],OrdTP[i],0))
+                        printf("OrderModify #"+IntegerToString(GetLastError()));
                  }
                else
                   Print("Open ",OrdSym[i]," failed: ",GetLastError());
@@ -610,8 +625,9 @@ void compare_positions()
            }
          else
            {
-            printf("10");
-            OrderDelete(RealOrdId[j],CLR_NONE);
+
+            if(!OrderDelete(RealOrdId[j],CLR_NONE))
+               printf("OrderDelete #"+IntegerToString(GetLastError()));
            }
         }
      }
@@ -661,21 +677,21 @@ void real_positions()
    int i=0;
    for(int cnt=0; cnt<OrdersTotal(); cnt++)
      {
-      OrderSelect(cnt, SELECT_BY_POS, MODE_TRADES);
-      if(OrderMagicNumber()==magic || ! magic)
-        {
-         if(RealSize<i+1)
-            RealResize(i+1);
-         RealOrdId[i]=OrderTicket();
-         RealOrdSym[i]=OrderSymbol();
-         RealOrdTyp[i]=OrderType();
-         RealOrdLot[i]=OrderLots();
-         RealOrdPrice[i]=OrderOpenPrice();
-         RealOrdSL[i]=OrderStopLoss();
-         RealOrdTP[i]=OrderTakeProfit();
-         RealOrdOrig[i]=OrderComment();
-         i++;
-        }
+      if(OrderSelect(cnt, SELECT_BY_POS, MODE_TRADES))
+         if(OrderMagicNumber()==magic || ! magic)
+           {
+            if(RealSize<i+1)
+               RealResize(i+1);
+            RealOrdId[i]=OrderTicket();
+            RealOrdSym[i]=OrderSymbol();
+            RealOrdTyp[i]=OrderType();
+            RealOrdLot[i]=OrderLots();
+            RealOrdPrice[i]=OrderOpenPrice();
+            RealOrdSL[i]=OrderStopLoss();
+            RealOrdTP[i]=OrderTakeProfit();
+            RealOrdOrig[i]=OrderComment();
+            i++;
+           }
      }
    RealResize(i);
   }
